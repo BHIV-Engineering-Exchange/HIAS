@@ -1,0 +1,54 @@
+services:
+
+  hias-backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: hias_backend_local
+    restart: unless-stopped
+    ports:
+      - "8026:8000"
+    env_file:
+      - ./backend/.env
+    volumes:
+      - hias_data_local:/app/data
+    networks:
+      - hias_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  hias-frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - VITE_API_URL=http://localhost:8026
+    container_name: hias_frontend_local
+    restart: unless-stopped
+    ports:
+      - "5183:5173"
+    env_file:
+      - ./frontend/.env
+    networks:
+      - hias_network
+    depends_on:
+      hias-backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:5173/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+networks:
+  hias_network:
+    driver: bridge
+
+volumes:
+  hias_data_local:
+    driver: local

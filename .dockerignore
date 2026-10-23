@@ -1,0 +1,16 @@
+.git
+.github
+**/.git
+**/node_modules
+**/__pycache__
+**/*.pyc
+**/.venv
+**/venv
+**/dist
+**/build
+**/.DS_Store
+*.log
+*.pdf
+*.jpeg
+*.jpg
+*.png

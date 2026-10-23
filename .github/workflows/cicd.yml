@@ -1,0 +1,375 @@
+name: HIAS Production Infrastructure CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  validate:
+    name: Validate production deployment
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set GitHub SHA
+        run: echo "short_sha=${GITHUB_SHA::7}" >> $GITHUB_ENV
+
+      - name: Generate Compose file for validation
+        run: |
+          sed "s|IMG_TAG|$short_sha|g" docker-compose.production.template.yml > docker-compose.production.yml
+
+      - name: Create stub .env files for compose validation
+        run: |
+          # Docker Compose config requires env_files to exist to validate schema
+          mkdir -p backend frontend
+          cat <<'EOF' > backend/.env
+          PORT=8000
+          DATABASE_URL=sqlite:///./data/hias.db
+          COSEC_BASE_URL=http://192.168.1.100
+          COSEC_USERNAME=admin
+          COSEC_PASSWORD=password123
+          COSEC_POLL_INTERVAL=2.0
+          EOF
+          cat <<'EOF' > frontend/.env
+          VITE_API_URL=http://localhost:8026
+          EOF
+
+      - name: Validate Docker Compose files
+        run: |
+          docker compose -f docker-compose.production.yml config
+
+      - name: Upload deployment artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-artifacts
+          path: |
+            docker-compose.production.template.yml
+
+  build:
+    name: Build production images
+    runs-on: ubuntu-latest
+    needs: validate
+    outputs:
+      sha_short: ${{ steps.vars.outputs.sha_short }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set short git commit SHA
+        id: vars
+        run: echo "sha_short=$(git rev-parse --short=7 HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and push hias-backend image
+        run: |
+          docker buildx build --push \
+            --tag bhiv/hias-backend:${{ steps.vars.outputs.sha_short }} \
+            --tag bhiv/hias-backend:latest \
+            -f backend/Dockerfile backend
+
+      - name: Create frontend env files for build
+        run: |
+          mkdir -p frontend
+          if [ -n "${{ secrets.HIAS_FRONTEND_ENV_FILE }}" ]; then
+            cat <<'EOF' > frontend/.env
+          ${{ secrets.HIAS_FRONTEND_ENV_FILE }}
+          EOF
+          elif [ -n "${{ secrets.FRONTEND_ENV_FILE }}" ]; then
+            cat <<'EOF' > frontend/.env
+          ${{ secrets.FRONTEND_ENV_FILE }}
+          EOF
+          else
+            cat <<'EOF' > frontend/.env
+          VITE_API_URL=http://${{ secrets.VM_IP }}:8026
+          EOF
+          fi
+
+      - name: Build and push hias-frontend image
+        run: |
+          # Parse VITE_API_URL from secret-created .env file or fallback to VM_IP:8026
+          VITE_API_URL=$(grep -E '^VITE_API_URL=' frontend/.env | cut -d'=' -f2- || true)
+          if [ -z "$VITE_API_URL" ]; then
+            VITE_API_URL="http://${{ secrets.VM_IP }}:8026"
+          fi
+          docker buildx build --push \
+            --tag bhiv/hias-frontend:${{ steps.vars.outputs.sha_short }} \
+            --tag bhiv/hias-frontend:latest \
+            --build-arg VITE_API_URL="$VITE_API_URL" \
+            -f frontend/Dockerfile frontend
+
+  deploy:
+    name: Deploy to remote production VM via SSH
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download deployment artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: deployment-artifacts
+
+      - name: Create env files from secrets
+        run: |
+          mkdir -p backend frontend
+          if [ -n "${{ secrets.HIAS_BACKEND_ENV_FILE }}" ]; then
+            cat <<'EOF' > backend/.env
+          ${{ secrets.HIAS_BACKEND_ENV_FILE }}
+          EOF
+          elif [ -n "${{ secrets.BACKEND_ENV_FILE }}" ]; then
+            cat <<'EOF' > backend/.env
+          ${{ secrets.BACKEND_ENV_FILE }}
+          EOF
+          else
+            cat <<'EOF' > backend/.env
+          PORT=8000
+          DATABASE_URL=sqlite:///./data/hias.db
+          COSEC_BASE_URL=http://192.168.1.100
+          COSEC_USERNAME=admin
+          COSEC_PASSWORD=password123
+          COSEC_POLL_INTERVAL=2.0
+          EOF
+          fi
+
+          if [ -n "${{ secrets.HIAS_FRONTEND_ENV_FILE }}" ]; then
+            cat <<'EOF' > frontend/.env
+          ${{ secrets.HIAS_FRONTEND_ENV_FILE }}
+          EOF
+          elif [ -n "${{ secrets.FRONTEND_ENV_FILE }}" ]; then
+            cat <<'EOF' > frontend/.env
+          ${{ secrets.FRONTEND_ENV_FILE }}
+          EOF
+          else
+            cat <<'EOF' > frontend/.env
+          VITE_API_URL=http://${{ secrets.VM_IP }}:8026
+          EOF
+          fi
+
+      - name: Tar deployment files
+        run: |
+          tar -czf deployment.tar.gz docker-compose.production.template.yml backend/.env frontend/.env
+
+      - name: Install sshpass
+        run: |
+          sudo apt-get update && sudo apt-get install -y sshpass
+
+      - name: Create HIAS directory on VM
+        run: |
+          sshpass -p "${{ secrets.VM_PASSWORD }}" ssh -p ${{ secrets.VM_PORT }} -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ secrets.VM_IP }} "mkdir -p ~/HIAS"
+
+      - name: Copy deployment tarball to VM
+        run: |
+          sshpass -p "${{ secrets.VM_PASSWORD }}" scp -P ${{ secrets.VM_PORT }} -o StrictHostKeyChecking=no deployment.tar.gz ${{ secrets.VM_USERNAME }}@${{ secrets.VM_IP }}:~/HIAS/deployment.tar.gz
+
+      - name: Deploy production stack on VM
+        run: |
+          sshpass -p "${{ secrets.VM_PASSWORD }}" ssh -p ${{ secrets.VM_PORT }} -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ secrets.VM_IP }} "bash -s" << 'EOF'
+            set -euo pipefail
+            cd ~/HIAS
+
+            # Preserve docs folder (Release History) and deployment tarball
+            find . -mindepth 1 ! -name docs ! -path './docs/*' ! -name deployment.tar.gz -exec rm -rf {} +
+
+            # Extract deployment archive and clean up tarball
+            tar -xzf deployment.tar.gz
+            rm -f deployment.tar.gz
+
+            # Confirm Docker availability
+            docker version
+            docker compose version
+
+            # Authenticate to Docker Hub for pulling private images
+            echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+
+            # Restore persistent Release History
+            mkdir -p docs
+            if [ -f /var/tmp/HIAS/RELEASE_HISTORY.md ]; then
+              cp /var/tmp/HIAS/RELEASE_HISTORY.md docs/RELEASE_HISTORY.md
+            fi
+
+            # Generate target compose file from template by substituting image tag
+            sed "s|IMG_TAG|${{ needs.build.outputs.sha_short }}|g" docker-compose.production.template.yml > docker-compose.production.yml
+
+            # Validate compose config before deploying
+            docker compose -f docker-compose.production.yml config
+
+            # Pull production images
+            docker compose -f docker-compose.production.yml pull
+
+            # Secure credentials by logging out of Docker Hub
+            docker logout
+
+            # Spin up containers
+            docker compose -f docker-compose.production.yml up -d --remove-orphans
+
+            # Verify deployment status
+            docker compose -f docker-compose.production.yml ps
+
+            # Health Check loop - Verify backend (8026) and frontend (5183)
+            echo "Waiting for HIAS services to be healthy..."
+            for i in {1..12}; do
+              UNHEALTHY_COUNT=0
+              STARTING_COUNT=0
+              if docker compose -f docker-compose.production.yml ps --filter "status=running" --filter "health=unhealthy" -q 2>/dev/null | grep -q .; then
+                UNHEALTHY_COUNT=$(docker compose -f docker-compose.production.yml ps --filter "status=running" --filter "health=unhealthy" -q | wc -l)
+              fi
+              if docker compose -f docker-compose.production.yml ps --filter "status=running" --filter "health=starting" -q 2>/dev/null | grep -q .; then
+                STARTING_COUNT=$(docker compose -f docker-compose.production.yml ps --filter "status=running" --filter "health=starting" -q | wc -l)
+              fi
+
+              HIAS_BE_HEALTH=$(docker inspect --format='{{json .State.Health.Status}}' hias_backend 2>/dev/null || echo '"unknown"')
+              HIAS_FE_HEALTH=$(docker inspect --format='{{json .State.Health.Status}}' hias_frontend 2>/dev/null || echo '"unknown"')
+
+              if [ "$UNHEALTHY_COUNT" -eq 0 ] && [ "$STARTING_COUNT" -eq 0 ] && [ "$HIAS_BE_HEALTH" = '"healthy"' ] && [ "$HIAS_FE_HEALTH" = '"healthy"' ]; then
+                echo "✅ All HIAS services are healthy and responsive!"
+                break
+              fi
+
+              if [ "$i" -eq 12 ]; then
+                echo "❌ HIAS services failed healthcheck threshold after 120 seconds."
+                docker compose -f docker-compose.production.yml ps
+                docker compose -f docker-compose.production.yml logs --tail=50
+                exit 1
+              fi
+
+              echo "Status: $STARTING_COUNT starting, $UNHEALTHY_COUNT unhealthy, be=$HIAS_BE_HEALTH, fe=$HIAS_FE_HEALTH. Retrying in 10s..."
+              sleep 10
+            done
+
+            # Prune old images while preserving recently built ones (last 7 days / 168 hours)
+            docker image prune -af --filter "until=168h"
+          EOF
+
+      - name: Update Release Documentation on Success
+        if: success()
+        run: |
+          sshpass -p "${{ secrets.VM_PASSWORD }}" ssh -p ${{ secrets.VM_PORT }} -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ secrets.VM_IP }} "bash -s" << 'EOF'
+            set -euo pipefail
+            cd ~/HIAS
+            if [ ! -f docs/RELEASE_HISTORY.md ]; then
+              mkdir -p docs
+              echo "# HIAS Release History and Deployment Registry" > docs/RELEASE_HISTORY.md
+              echo "" >> docs/RELEASE_HISTORY.md
+              echo "| Timestamp | Image Tag (Git SHA) | Status | Description |" >> docs/RELEASE_HISTORY.md
+              echo "|---|---|---|---|" >> docs/RELEASE_HISTORY.md
+            fi
+            echo "| $(date -u +'%Y-%m-%d %H:%M:%S UTC') | ${{ needs.build.outputs.sha_short }} | SUCCESS | Stable deployment |" >> docs/RELEASE_HISTORY.md
+          EOF
+
+      - name: Save persistent Release History
+        if: always()
+        run: |
+          sshpass -p "${{ secrets.VM_PASSWORD }}" ssh -p ${{ secrets.VM_PORT }} -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ secrets.VM_IP }} "bash -s" << 'EOF'
+            set -euo pipefail
+            cd ~/HIAS
+            if [ -f docs/RELEASE_HISTORY.md ]; then
+              mkdir -p /var/tmp/HIAS
+              cp docs/RELEASE_HISTORY.md /var/tmp/HIAS/RELEASE_HISTORY.md
+            fi
+          EOF
+
+  rollback:
+    name: Rollback on deployment failure
+    needs: [build, deploy]
+    if: always() && needs.deploy.result == 'failure'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install sshpass
+        run: |
+          sudo apt-get update && sudo apt-get install -y sshpass
+
+      - name: Automatic Rollback on Failure
+        run: |
+          sshpass -p "${{ secrets.VM_PASSWORD }}" ssh -p ${{ secrets.VM_PORT }} -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ secrets.VM_IP }} "bash -s" << 'EOF'
+            set -euo pipefail
+            cd ~/HIAS
+
+            # Parse Release History for last known healthy 7-character hexadecimal SHA
+            if [ -f docs/RELEASE_HISTORY.md ] && grep -qE "SUCCESS|ROLLBACK_SUCCESS" docs/RELEASE_HISTORY.md; then
+              LAST_HEALTHY_TAG=$(grep -E "SUCCESS|ROLLBACK_SUCCESS" docs/RELEASE_HISTORY.md | tail -n 1 | awk -F '|' '{
+                for(i=1; i<=NF; i++) {
+                  gsub(/[[:space:]]/, "", $i);
+                  if ($i ~ /^[0-9a-f]{7}$/) {
+                    print $i;
+                    exit;
+                  }
+                }
+              }')
+
+              if [ -z "$LAST_HEALTHY_TAG" ]; then
+                echo "⚠️ No last healthy tag extracted from Release History. Cannot perform automatic rollback."
+                exit 1
+              fi
+
+              echo "🚨 Deployment failed! Rolling back to last healthy tag: $LAST_HEALTHY_TAG"
+
+              sed "s|IMG_TAG|$LAST_HEALTHY_TAG|g" docker-compose.production.template.yml > docker-compose.production.yml
+
+              echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+              docker compose -f docker-compose.production.yml pull
+              docker logout
+
+              docker compose -f docker-compose.production.yml up -d --remove-orphans
+
+              echo "Verifying health status of rolled back containers..."
+              for i in {1..12}; do
+                UNHEALTHY_COUNT=0
+                STARTING_COUNT=0
+                if docker compose -f docker-compose.production.yml ps --filter "status=running" --filter "health=unhealthy" -q 2>/dev/null | grep -q .; then
+                  UNHEALTHY_COUNT=$(docker compose -f docker-compose.production.yml ps --filter "status=running" --filter "health=unhealthy" -q | wc -l)
+                fi
+                if docker compose -f docker-compose.production.yml ps --filter "status=running" --filter "health=starting" -q 2>/dev/null | grep -q .; then
+                  STARTING_COUNT=$(docker compose -f docker-compose.production.yml ps --filter "status=running" --filter "health=starting" -q | wc -l)
+                fi
+
+                HIAS_BE_HEALTH=$(docker inspect --format='{{json .State.Health.Status}}' hias_backend 2>/dev/null || echo '"unknown"')
+                HIAS_FE_HEALTH=$(docker inspect --format='{{json .State.Health.Status}}' hias_frontend 2>/dev/null || echo '"unknown"')
+
+                if [ "$UNHEALTHY_COUNT" -eq 0 ] && [ "$STARTING_COUNT" -eq 0 ] && [ "$HIAS_BE_HEALTH" = '"healthy"' ] && [ "$HIAS_FE_HEALTH" = '"healthy"' ]; then
+                  echo "✅ Rollback verified healthy on tag $LAST_HEALTHY_TAG."
+                  echo "| $(date -u +'%Y-%m-%d %H:%M:%S UTC') | $LAST_HEALTHY_TAG | ROLLBACK_SUCCESS | Rolled back from failed ${{ needs.build.outputs.sha_short }} |" >> docs/RELEASE_HISTORY.md
+                  break
+                fi
+
+                if [ "$i" -eq 12 ]; then
+                  echo "❌ Rollback containers failed healthchecks after 120s."
+                  echo "| $(date -u +'%Y-%m-%d %H:%M:%S UTC') | $LAST_HEALTHY_TAG | ROLLBACK_FAILED | Rollback from failed ${{ needs.build.outputs.sha_short }} failed health check |" >> docs/RELEASE_HISTORY.md
+                  exit 1
+                fi
+
+                echo "Rollback status: $STARTING_COUNT starting, $UNHEALTHY_COUNT unhealthy, be=$HIAS_BE_HEALTH, fe=$HIAS_FE_HEALTH. Retrying in 10s..."
+                sleep 10
+              done
+            else
+              echo "⚠️ No last healthy tag found in Release History. Cannot perform automatic rollback."
+              if [ ! -f docs/RELEASE_HISTORY.md ]; then
+                mkdir -p docs
+                echo "# HIAS Release History and Deployment Registry" > docs/RELEASE_HISTORY.md
+                echo "" >> docs/RELEASE_HISTORY.md
+                echo "| Timestamp | Image Tag (Git SHA) | Status | Description |" >> docs/RELEASE_HISTORY.md
+                echo "|---|---|---|---|" >> docs/RELEASE_HISTORY.md
+              fi
+              echo "| $(date -u +'%Y-%m-%d %H:%M:%S UTC') | ${{ needs.build.outputs.sha_short }} | FAILED | Deployment failed and no rollback tag was available |" >> docs/RELEASE_HISTORY.md
+              exit 1
+            fi
+          EOF
+
+      - name: Save persistent Release History
+        if: always()
+        run: |
+          sshpass -p "${{ secrets.VM_PASSWORD }}" ssh -p ${{ secrets.VM_PORT }} -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ secrets.VM_IP }} "bash -s" << 'EOF'
+            set -euo pipefail
+            cd ~/HIAS
+            if [ -f docs/RELEASE_HISTORY.md ]; then
+              mkdir -p /var/tmp/HIAS
+              cp docs/RELEASE_HISTORY.md /var/tmp/HIAS/RELEASE_HISTORY.md
+            fi
+          EOF
