@@ -1,8 +1,7 @@
 import asyncio
-import json
+import time
 import os
 from datetime import datetime
-from collections import deque
 from typing import List, Optional
 from fastapi import FastAPI, HTTPException, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
@@ -10,7 +9,8 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.schemas import (
-    AccessInput, ControllerEvent, Decision, Reason, Direction, Method, ReviewAction
+    AccessInput, ControllerEvent, Decision, Reason, Direction, Method,
+    ReviewAction, ManualOverrideInput, UserEnrollInput, SettingsUpdateInput
 )
 from app.engine import evaluate, seed_db
 from app.hardware import open_gate, GPIO_ENABLED
@@ -35,7 +35,7 @@ app.add_middleware(
 # --- Global State ---
 SSE_CLIENTS: List[asyncio.Queue] = []
 DUPLICATE_CACHE = {}  # (user_id, device_id) -> timestamp
-DUPLICATE_THRESHOLD = 0.1
+DUPLICATE_THRESHOLD = 2.0
 REVIEW_QUEUE = {}  # trace_id -> ControllerEvent
 
 # Default Settings (will be overridden by DB if exists)
@@ -49,7 +49,8 @@ SYSTEM_SETTINGS = {
 COSEC_WORKER: Optional[CosecWorker] = None
 
 @app.on_event("startup")
-def startup_event():
+async def startup_event():
+    # BUG-FIX: must be async def to safely call asyncio.create_task
     with next(get_db()) as db:
         seed_db(db)
         # Load settings from DB if they exist
@@ -60,7 +61,7 @@ def startup_event():
                 SYSTEM_SETTINGS[s.key] = s.value == "True"
             else:
                 SYSTEM_SETTINGS[s.key] = s.value
-    
+
     # Initialize COSEC Background Worker
     global COSEC_WORKER
     COSEC_WORKER = CosecWorker(process_access_request, broadcast_event)
@@ -80,8 +81,10 @@ async def broadcast_event(event: ControllerEvent):
 def process_access_request(db: Session, user_id: str, method: Method, device_id: str, bypass_cache: bool = False) -> Optional[ControllerEvent]:
     """Core logic for processing access requests from any source."""
     # 1. Duplicate Prevention
+    # BUG-FIX: asyncio.get_event_loop().time() is unsafe in a sync function running
+    # inside an async FastAPI server. Use time.monotonic() which is always safe.
     if not bypass_cache:
-        now = asyncio.get_event_loop().time()
+        now = time.monotonic()
         dup_key = (user_id, device_id)
         if dup_key in DUPLICATE_CACHE:
             if now - DUPLICATE_CACHE[dup_key] < DUPLICATE_THRESHOLD:
@@ -181,8 +184,9 @@ async def event_stream(request: Request):
     )
 
 @app.post("/manual/override", response_model=ControllerEvent)
-async def manual_override(payload: dict, db: Session = Depends(get_db)):
-    reason_text = payload.get("reason", "No reason provided")
+async def manual_override(payload: ManualOverrideInput, db: Session = Depends(get_db)):
+    # BUG-FIX: replaced raw dict with strict Pydantic ManualOverrideInput model
+    reason_text = payload.reason
     # Use bypass_cache=True for manual overrides
     event = process_access_request(db, "S100", Method.MANUAL, "manual_console_01", bypass_cache=True)
     if event:
@@ -200,10 +204,12 @@ async def get_settings():
     return SYSTEM_SETTINGS
 
 @app.post("/settings")
-async def update_settings(new_settings: dict, db: Session = Depends(get_db)):
+async def update_settings(new_settings: SettingsUpdateInput, db: Session = Depends(get_db)):
+    # BUG-FIX: replaced raw dict with strict Pydantic SettingsUpdateInput model
     global SYSTEM_SETTINGS
-    SYSTEM_SETTINGS.update(new_settings)
-    for key, value in new_settings.items():
+    update_data = new_settings.model_dump(exclude_none=True)
+    SYSTEM_SETTINGS.update(update_data)
+    for key, value in update_data.items():
         db_setting = db.query(Setting).filter(Setting.key == key).first()
         if db_setting:
             db_setting.value = str(value)
@@ -347,16 +353,13 @@ async def get_all_users(db: Session = Depends(get_db)):
     return [{"user_id": u.user_id, "name": u.name, "role": u.role} for u in db_users]
 
 @app.post("/users")
-async def enroll_user(user: dict, db: Session = Depends(get_db)):
-    user_id = user.get("user_id")
-    name = user.get("name")
-    if not user_id or not name:
-        raise HTTPException(status_code=400, detail="User ID and Name are required")
-    if db.query(User).filter(User.user_id == user_id).first():
+async def enroll_user(user: UserEnrollInput, db: Session = Depends(get_db)):
+    # BUG-FIX: replaced raw dict with strict Pydantic UserEnrollInput model
+    if db.query(User).filter(User.user_id == user.user_id).first():
         raise HTTPException(status_code=400, detail="User ID already exists")
-    db.add(User(user_id=user_id, name=name))
+    db.add(User(user_id=user.user_id, name=user.name, role=user.role))
     db.commit()
-    return {"status": "success", "user_id": user_id}
+    return {"status": "success", "user_id": user.user_id}
 
 @app.get("/users/search")
 async def search_users(q: str = "", db: Session = Depends(get_db)):

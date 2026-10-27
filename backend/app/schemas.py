@@ -1,5 +1,6 @@
 # Canonical event schema for all HIAS controller events
 from datetime import datetime
+from typing import Literal
 import uuid
 from enum import Enum
 from pydantic import BaseModel, Field
@@ -22,12 +23,6 @@ class Decision(str, Enum):
     REVIEW = "REVIEW"
 
 
-class ReviewAction(BaseModel):
-    trace_id: str
-    action: str  # "confirm" or "reject"
-
-
-
 class Reason(str, Enum):
     VALID = "VALID"
     UNKNOWN = "UNKNOWN"
@@ -37,9 +32,38 @@ class Reason(str, Enum):
 # --- Inbound Payloads ---
 
 class AccessInput(BaseModel):
-    user_id: str
+    """Strictly validated inbound access event payload."""
+    user_id: str = Field(..., min_length=1)
     method: Method
-    device_id: str
+    device_id: str = Field(..., min_length=1)
+
+
+class ReviewAction(BaseModel):
+    """Strictly validated review queue action — only 'confirm' or 'reject' are legal."""
+    trace_id: str = Field(..., min_length=1)
+    action: Literal["confirm", "reject"]
+
+
+class ManualOverrideInput(BaseModel):
+    """Strictly validated manual override payload."""
+    reason: str = Field(default="No reason provided", min_length=1)
+
+
+class UserEnrollInput(BaseModel):
+    """Strictly validated user enrolment payload."""
+    user_id: str = Field(..., min_length=1)
+    name: str = Field(..., min_length=1)
+    role: str = Field(default="Resident")
+
+
+class SettingsUpdateInput(BaseModel):
+    """Strictly validated settings update payload."""
+    emergency_mode: bool | None = None
+    access_window_start: str | None = None
+    access_window_end: str | None = None
+    require_admin_approval: bool | None = None
+
+    model_config = {"extra": "forbid"}
 
 
 # --- Canonical Event ---
@@ -51,7 +75,7 @@ class ControllerEvent(BaseModel):
     direction: Direction
     method: Method
     decision: Decision
-    reason: Reason
+    reason: Reason | str
     device_id: str
-    timestamp: str = Field(default_factory=lambda: datetime.now().isoformat())
 
+    timestamp: str = Field(default_factory=lambda: datetime.now().isoformat())

@@ -3,7 +3,7 @@ import time
 
 BASE_URL = "http://127.0.0.1:8000"
 
-def test_failure_scenarios():
+def run_failure_scenarios():
     print("Starting Phase 5: Failure Testing...")
     
     # 1. Malformed JSON
@@ -39,4 +39,5 @@ def test_failure_scenarios():
     print(f"Status: {response.status_code} | Decision: {event['decision']} | Reason: {event['reason']}")
 
 if __name__ == "__main__":
-    test_failure_scenarios()
+    run_failure_scenarios()
+

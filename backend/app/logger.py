@@ -3,20 +3,25 @@
 
 import json
 import os
+import threading
 import requests
 from datetime import datetime
 
 LOGS_SERVICE_URL = "http://127.0.0.1:8001/events"
 
+def _async_post(url: str, data: dict, fail_prefix: str):
+    def _send():
+        try:
+            requests.post(url, json=data, timeout=1)
+        except Exception as e:
+            pass
+    threading.Thread(target=_send, daemon=True).start()
+
 def log_event(event: dict) -> None:
     """
     Forward a canonical controller event to the Truth Layer (Logging Service).
     """
-    try:
-        requests.post(LOGS_SERVICE_URL, json=event, timeout=2)
-    except Exception as e:
-        print(f"[EVENT_LOG_FAIL] Could not send event to Truth Layer: {e}")
-    
+    _async_post(LOGS_SERVICE_URL, event, "EVENT_LOG_FAIL")
     print(f"[EVENT_LOG] trace_id={event.get('trace_id')} | "
           f"decision={event.get('decision')} | "
           f"user_id={event.get('user_id')}")
@@ -32,8 +37,6 @@ def log_relay(trace_id: str, user_id: str) -> None:
         "user_id": user_id,
         "timestamp": datetime.now().isoformat(),
     }
-    try:
-        requests.post(LOGS_SERVICE_URL, json=relay_entry, timeout=2)
-    except Exception as e:
-        print(f"[RELAY_LOG_FAIL] Could not send relay to Truth Layer: {e}")
+    _async_post(LOGS_SERVICE_URL, relay_entry, "RELAY_LOG_FAIL")
+
 
