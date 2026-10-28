@@ -1,0 +1,25 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "http://192.168.1.50:8000/access/event",
+    "body": {
+      "user_id": "4455667788",
+      "method": "RFID",
+      "device_id": "GATE_GIRLS_OUT"
+    }
+  },
+  "response": {
+    "status_code": 200,
+    "body": {
+      "trace_id": "f8a023b9-11ea-42ce-a7bc-204128f731e0",
+      "user_id": "S2501",
+      "name": "Pritesh Patra",
+      "direction": "OUT",
+      "method": "RFID",
+      "decision": "ALLOW",
+      "reason": "VALID",
+      "device_id": "GATE_GIRLS_OUT",
+      "timestamp": "2026-10-28T18:14:10.104200"
+    }
+  }
+}

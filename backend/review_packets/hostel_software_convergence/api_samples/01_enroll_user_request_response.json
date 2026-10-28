@@ -1,0 +1,65 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "http://192.168.1.50:8000/users/enroll",
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "user_id": "S2501",
+      "name": "Pritesh Patra",
+      "role": "Resident",
+      "department": "Girls Hostel Block A - Room 101",
+      "rfid_card": "4455667788",
+      "face_data": "COSEC_ARGO_FACE_TEMPLATE_PRITESH",
+      "auto_sync": true
+    }
+  },
+  "response": {
+    "status_code": 200,
+    "headers": {
+      "content-type": "application/json",
+      "access-control-allow-origin": "http://192.168.1.50:5173",
+      "access-control-allow-credentials": "true"
+    },
+    "body": {
+      "status": "success",
+      "user_id": "S2501",
+      "name": "Pritesh Patra",
+      "ref_user_id": 1007,
+      "role": "Resident",
+      "credentials": [
+        {
+          "credential_id": "9d81fc20-df70-42f0-91c2-c07a3c306e01",
+          "type": "RFID",
+          "card_number": "4455667788"
+        },
+        {
+          "credential_id": "3b2e5910-449e-4a61-b541-03e33b664722",
+          "type": "FACE",
+          "card_number": null
+        }
+      ],
+      "sync_report": {
+        "GATE_GIRLS_IN_RFID": {
+          "gate": "Girls Hostel Main Entrance In",
+          "type": "RFID",
+          "status": "SYNCED",
+          "error": null
+        },
+        "GATE_GIRLS_OUT_RFID": {
+          "gate": "Girls Hostel Main Entrance Out",
+          "type": "RFID",
+          "status": "SYNCED",
+          "error": null
+        },
+        "GATE_DINING_01_RFID": {
+          "gate": "Hostel Central Dining Hall Gate",
+          "type": "RFID",
+          "status": "SYNCED",
+          "error": null
+        }
+      }
+    }
+  }
+}

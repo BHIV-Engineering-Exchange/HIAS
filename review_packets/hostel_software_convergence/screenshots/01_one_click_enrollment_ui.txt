@@ -1,0 +1,33 @@
++-----------------------------------------------------------------------------------------+
+| [HIAS] HOSTEL INTELLIGENCE & ACCESS CONTROL                   Status: ● CONNECTED (SSE) |
++-----------------------------------------------------------------------------------------+
+| Dashboard | Live Monitor | [Users & Credentials] | Review Queue | Reports | System Status |
++-----------------------------------------------------------------------------------------+
+|                                                                                         |
+|  +-----------------------------------------------------------------------------------+  |
+|  |  [+] ONE-CLICK CENTRAL ENROLLMENT MODAL                                           |  |
+|  |  Registers canonical identity & pushes credentials to all physical hostel gates   |  |
+|  +-----------------------------------------------------------------------------------+  |
+|  |                                                                                   |  |
+|  |  USER ID:               ROLE:                                                     |  |
+|  |  [ S2501            ]   [ Resident        v ]                                     |  |
+|  |                                                                                   |  |
+|  |  FULL NAME:                                                                       |  |
+|  |  [ Pritesh Patra                                                                ] |  |
+|  |                                                                                   |  |
+|  |  DEPARTMENT / ROOM NUMBER:                                                        |  |
+|  |  [ Girls Hostel Block A - Room 101                                              ] |  |
+|  |                                                                                   |  |
+|  |  +-- HARDWARE CREDENTIAL PROVISIONING -----------------------------------------+  |  |
+|  |  | RFID Card CSN / Number (64-bit unsigned):                                    |  |  |
+|  |  | [ 4455667788                                                               ] |  |  |
+|  |  |                                                                             |  |  |
+|  |  | [X] Provision Matrix COSEC ARGO Face Recognition Template (JPEG/Template)    |  |  |
+|  |  | [X] Automatically Push & Sync to all Active Hostel Gates                     |  |  |
+|  |  +-----------------------------------------------------------------------------+  |  |
+|  |                                                                                   |  |
+|  |  [ CANCEL ]                                                  [ ENROLL & SYNC ]    |  |
+|  +-----------------------------------------------------------------------------------+  |
+|                                                                                         |
++-----------------------------------------------------------------------------------------+
+

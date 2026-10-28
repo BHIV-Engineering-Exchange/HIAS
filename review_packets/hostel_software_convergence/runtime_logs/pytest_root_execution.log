@@ -1,0 +1,23 @@
+============================= test session starts =============================
+platform win32 -- Python 3.11.3, pytest-8.4.2, pluggy-1.6.0
+rootdir: C:\Users\PRITESH\Desktop\hias_combined
+configfile: pytest.ini
+testpaths: tests
+plugins: anyio-3.7.1, locust-2.45.0, asyncio-0.24.0, cov-7.1.0
+asyncio: mode=Mode.AUTO, default_loop_scope=None
+collected 130 items
+
+tests\integration\test_backend_api.py .......................            [ 17%]
+tests\integration\test_backend_worker.py ..                              [ 19%]
+tests\integration\test_convergence_mission.py ...........                [ 27%]
+tests\integration\test_production_api.py ...................             [ 42%]
+tests\unit\test_backend_cosec.py ............                            [ 51%]
+tests\unit\test_backend_engine.py ...............                        [ 63%]
+tests\unit\test_backend_schemas.py .....................                 [ 79%]
+tests\unit\test_local_llm_client.py ..                                   [ 80%]
+tests\unit\test_review_orchestrator.py .......                           [ 86%]
+tests\unit\test_rule_engine.py ................                          [ 98%]
+tests\unit\test_security_middleware.py ..                                [100%]
+
+============================= 130 passed in 9.32s =============================
+

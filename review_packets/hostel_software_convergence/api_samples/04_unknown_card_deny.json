@@ -1,0 +1,26 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "http://192.168.1.50:8000/access/event",
+    "body": {
+      "user_id": "UNKNOWN_CARD_9999",
+      "method": "RFID",
+      "device_id": "GATE_GIRLS_IN"
+    }
+  },
+  "response": {
+    "status_code": 200,
+    "body": {
+      "trace_id": "5e1a0671-8931-4ce8-89c5-34200ea88812",
+      "user_id": "UNKNOWN_CARD_9999",
+      "name": "Unknown User",
+      "direction": "IN",
+      "method": "RFID",
+      "decision": "DENY",
+      "reason": "UNKNOWN",
+      "device_id": "GATE_GIRLS_IN",
+      "timestamp": "2026-10-28T18:22:15.110294"
+    }
+  }
+}
+

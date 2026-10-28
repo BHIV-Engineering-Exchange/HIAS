@@ -1,0 +1,11 @@
+{
+  "status": "healthy",
+  "service": "hias-controller",
+  "timestamp": "2026-10-28T18:23:45.012391",
+  "database": "connected",
+  "metrics": {
+    "total_users": 2507,
+    "registered_gates": 3,
+    "credentials": 2514
+  }
+}

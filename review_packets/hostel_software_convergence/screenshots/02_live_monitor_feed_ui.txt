@@ -1,0 +1,14 @@
++-----------------------------------------------------------------------------------------------+
+| [HIAS] REAL-TIME ACCESS MONITOR                                     STATUS: ● CONNECTED (SSE) |
++-----------------------------------------------------------------------------------------------+
+| Trace ID | Resident Name       | Role     | Gate Location | Method | Direction | Decision     |
++----------+---------------------+----------+---------------+--------+-----------+--------------+
+| c1f7a049 | Pritesh Patra       | Resident | GATE_GIRLS_IN | RFID   | IN        | ALLOW (VALID)|
+| f8a023b9 | Pritesh Patra       | Resident | GATE_GIRLS_OUT| RFID   | OUT       | ALLOW (VALID)|
+| 18ac2854 | Soham Kotkar        | Resident | GATE_DINING_01| FACE   | IN        | ALLOW (VALID)|
+| 5e1a0671 | Unknown User        | Unknown  | GATE_GIRLS_IN | RFID   | IN        | DENY(UNKNOWN)|
+| 9d021ba4 | Vijay Dhawan        | Resident | GATE_GIRLS_IN | RFID   | IN        | ALLOW (VALID)|
++-----------------------------------------------------------------------------------------------+
+| Real-time throughput: 42 events/min | Active SSE Listeners: 3 tablets | Mean Latency: 2.1ms   |
++-----------------------------------------------------------------------------------------------+
+

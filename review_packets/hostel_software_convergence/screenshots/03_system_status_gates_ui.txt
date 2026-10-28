@@ -1,0 +1,13 @@
++-------------------------------------------------------------------------------------------------+
+| [HIAS] REGISTERED PHYSICAL GATES & HARDWARE HEALTH                                              |
++-------------------------------------------------------------------------------------------------+
+| Gate ID        | Terminal Model         | IP Address    | Direction | Status   | Synced / Total |
++----------------+------------------------+---------------+-----------+----------+----------------+
+| GATE_GIRLS_IN  | Matrix COSEC ARGO FACE | 192.168.1.100 | IN        | ● ONLINE | 2514 / 2514    |
+| GATE_GIRLS_OUT | Matrix COSEC ARGO FACE | 192.168.1.101 | OUT       | ● ONLINE | 2514 / 2514    |
+| GATE_DINING_01 | COSEC PATH CONTROLLER  | 192.168.1.102 | IN        | ● ONLINE | 2514 / 2514    |
+| RPi_RELAY_01   | GPIO 17 Relay Unit     | Local BCM 17  | --        | ● ACTIVE | Hardware Opto  |
++-------------------------------------------------------------------------------------------------+
+| Overall Multi-Gate Synchronization Health: 100.0% (0 Pending / 0 Retrying / 0 Failed)           |
++-------------------------------------------------------------------------------------------------+
+

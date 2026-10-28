@@ -1,0 +1,11 @@
+{
+  "summary": {
+    "total_records": 7542,
+    "synced": 7542,
+    "pending": 0,
+    "retrying": 0,
+    "failed": 0,
+    "sync_health": "100.0%"
+  },
+  "recent_issues": []
+}

@@ -1,0 +1,22 @@
+INFO:     Started server process [19908]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8080 (Press CTRL+C to quit)
+INFO:     Started server process [4676]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+Starting Mock COSEC Server...
+Initializing Database...
+Starting HIAS Backend...
+Simulating card swipes on COSEC hardware...
+Waiting for polling cycle (3s)...
+Captured Events in DB: 4
+ - [2026-10-28 17:59:29.180152] User: Soham Kotkar (S001) | Method: Method.RFID | Decision: Decision.ALLOW | Device: cosec_device_101
+ - [2026-10-28 17:59:29.203063] User: Vijay Dhawan (S002) | Method: Method.RFID | Decision: Decision.ALLOW | Device: cosec_device_102
+ - [2026-10-28 18:09:23.909613] User: Soham Kotkar (S001) | Method: Method.RFID | Decision: Decision.ALLOW | Device: cosec_device_101
+ - [2026-10-28 18:09:23.925227] User: Vijay Dhawan (S002) | Method: Method.RFID | Decision: Decision.ALLOW | Device: cosec_device_102
+
+[SUCCESS] SYSTEM TEST PASSED! Hardware events polled, resolved, evaluated, and committed.
+Shutting down processes...
+

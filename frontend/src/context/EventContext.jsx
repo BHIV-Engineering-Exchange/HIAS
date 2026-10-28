@@ -37,36 +37,62 @@ export function EventProvider({ children }) {
     fetchEvents();
     fetchQueue();
 
-    // SSE Connection to Python Backend
-    const evtSource = new EventSource(API_ENDPOINTS.STREAM);
-    
-    evtSource.onmessage = (e) => {
+    // Resilient SSE Connection to Python Backend with auto-reconnect
+    let reconnectTimeout = null;
+    let evtSource = null;
+
+    const connectSSE = () => {
       try {
-        const data = JSON.parse(e.data);
-        setEvents((prev) => [data, ...prev.slice(0, 49)]);
+        evtSource = new EventSource(API_ENDPOINTS.STREAM);
         
-        // Phase 5: Queue Control Logic - Handle queue via SSE
-        if (data.decision === 'REVIEW') {
-          setReviewItems((prev) => {
-            if (!prev.find(item => item.trace_id === data.trace_id)) {
-              return [...prev, data];
+        evtSource.onopen = () => {
+          setConnected(true);
+          console.log("[SSE] Connected to backend events stream at", API_ENDPOINTS.STREAM);
+        };
+
+        evtSource.onmessage = (e) => {
+          try {
+            if (!e.data || e.data.trim() === '{"status":"connected"}') return;
+            const data = JSON.parse(e.data);
+            setEvents((prev) => [data, ...prev.slice(0, 49)]);
+            
+            // Queue Control Logic - Handle queue via SSE
+            if (data.decision === 'REVIEW') {
+              setReviewItems((prev) => {
+                if (!prev.find(item => item.trace_id === data.trace_id)) {
+                  return [...prev, data];
+                }
+                return prev;
+              });
+            } else {
+              setReviewItems((prev) => prev.filter(item => item.trace_id !== data.trace_id));
             }
-            return prev;
-          });
-        } else {
-          // If a decision was ALLOW/DENY, it means the queue item was processed
-          // Remove it from the review queue
-          setReviewItems((prev) => prev.filter(item => item.trace_id !== data.trace_id));
-        }
-      } catch (err) {
-        console.error("Failed to parse SSE data", err);
+          } catch (err) {
+            console.error("Failed to parse SSE data", err);
+          }
+        };
+
+        evtSource.onerror = (err) => {
+          setConnected(false);
+          if (evtSource) {
+            evtSource.close();
+          }
+          clearTimeout(reconnectTimeout);
+          reconnectTimeout = setTimeout(connectSSE, 3000);
+        };
+      } catch (e) {
+        setConnected(false);
+        clearTimeout(reconnectTimeout);
+        reconnectTimeout = setTimeout(connectSSE, 3000);
       }
     };
 
-    evtSource.onopen = () => setConnected(true);
-    evtSource.onerror = () => setConnected(false);
+    connectSSE();
 
-    return () => evtSource.close();
+    return () => {
+      if (evtSource) evtSource.close();
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
+    };
   }, []);
 
   const triggerOverride = async (reason) => {
@@ -102,17 +128,42 @@ export function EventProvider({ children }) {
     }
   };
 
+  const triggerReviewSimulation = async () => {
+    try {
+      await fetch(API_ENDPOINTS.SIMULATE_REVIEW, { method: 'POST' });
+    } catch (err) {
+      console.error("Simulation failed", err);
+    }
+  };
+
+  const handleReviewAction = async (trace_id, action) => {
+    try {
+      await fetch(API_ENDPOINTS.REVIEW_ACTION, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ trace_id, action })
+      });
+      setReviewItems((prev) => prev.filter(item => item.trace_id !== trace_id));
+    } catch (err) {
+      console.error("Failed to process review action", err);
+    }
+  };
+
   return (
-    <EventContext.Provider value={{ events, reviewItems, connected, triggerOverride, triggerSimulation }}>
+    <EventContext.Provider value={{
+      events,
+      reviewItems,
+      connected,
+      triggerOverride,
+      triggerSimulation,
+      triggerReviewSimulation,
+      handleReviewAction
+    }}>
       {children}
     </EventContext.Provider>
   );
 }
 
 export function useEvents() {
-  const context = useContext(EventContext);
-  if (!context) {
-    throw new Error('useEvents must be used within an EventProvider');
-  }
-  return context;
+  return useContext(EventContext);
 }

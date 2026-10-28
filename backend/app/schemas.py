@@ -29,6 +29,20 @@ class Reason(str, Enum):
     TIME_BLOCK = "TIME_BLOCK"
 
 
+class CredentialType(str, Enum):
+    RFID = "RFID"
+    FACE = "FACE"
+    PIN = "PIN"
+
+
+class SyncStatus(str, Enum):
+    PENDING = "PENDING"
+    SYNCED = "SYNCED"
+    RETRYING = "RETRYING"
+    FAILED = "FAILED"
+    REVOKED = "REVOKED"
+
+
 # --- Inbound Payloads ---
 
 class AccessInput(BaseModel):
@@ -54,6 +68,37 @@ class UserEnrollInput(BaseModel):
     user_id: str = Field(..., min_length=1)
     name: str = Field(..., min_length=1)
     role: str = Field(default="Resident")
+    department: str | None = Field(default="Hostel Resident")
+    ref_user_id: int | None = Field(default=None)
+    rfid_card: str | None = Field(default=None)
+    face_data: str | None = Field(default=None)
+    auto_sync: bool = Field(default=True)
+
+
+class CredentialCreateInput(BaseModel):
+    """Strictly validated credential attachment payload."""
+    type: CredentialType
+    card_number: str | None = None
+    face_data: str | None = None
+
+
+class GateRegisterInput(BaseModel):
+    """Strictly validated gate registry input."""
+    gate_id: str = Field(..., min_length=1)
+    name: str = Field(..., min_length=1)
+    location: str = Field(default="Hostel Campus")
+    direction: Direction = Field(default=Direction.IN)
+    device_ip: str = Field(default="192.168.1.100")
+    device_port: int = Field(default=80)
+    device_model: str = Field(default="COSEC ARGO FACE")
+    device_type: str = Field(default="COSEC")
+    is_active: bool = Field(default=True)
+
+
+class GateSyncTriggerInput(BaseModel):
+    """Trigger manual or forced sync for specific gate or user."""
+    gate_id: str | None = None
+    user_id: str | None = None
 
 
 class SettingsUpdateInput(BaseModel):
