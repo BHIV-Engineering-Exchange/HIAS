@@ -5,7 +5,7 @@ pydantic-core==2.46.3
 requests==2.34.2
 python-dotenv==1.2.2
 cryptography==49.0.0
-pytest==9.0.3
+pytest==8.3.4
 pytest-asyncio==0.24.0
 sse-starlette==2.1.0
 sqlalchemy==2.0.30
