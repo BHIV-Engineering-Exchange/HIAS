@@ -33,8 +33,7 @@ async def test_worker_full_loop_success():
     ])
 
     # 3. Execute one loop iteration
-    # We call the internal _loop logic once instead of running the forever task
-    await worker._loop_once() # We'll need to refactor worker slightly for this or just run for a bit
+    await worker._loop_once()
 
     # 4. Verifications
     mock_process_request.assert_called_once()
@@ -50,12 +49,24 @@ async def test_worker_unknown_user_ignored():
     mock_process_request = MagicMock()
     mock_broadcast = AsyncMock()
     worker = CosecWorker(mock_process_request, mock_broadcast)
-    
+
     worker.adapter.fetch_events = AsyncMock(return_value=[
-        {"index": 201, "device_user_id": "UNKNOWN_999", "timestamp": "...", "method": Method.RFID}
+        {
+            "index": 201,
+            "device_user_id": "UNKNOWN_999",
+            "timestamp": "...",
+            "method": Method.RFID,
+        }
     ])
 
     await worker._loop_once()
 
     mock_process_request.assert_not_called()
-    assert worker.last_index == 0 # Index not advanced for failed users
+    assert worker.last_index == 0
+
+    # Re-fetching the same event must not process it again.
+    await worker._loop_once()
+
+    assert worker.adapter.fetch_events.call_count == 2
+    mock_process_request.assert_not_called()
+    assert worker.last_index == 0

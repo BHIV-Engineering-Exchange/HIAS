@@ -1,6 +1,7 @@
 import asyncio
 import time
 import os
+import httpx
 import uuid
 from datetime import datetime
 from typing import List, Optional, Dict, Any
@@ -19,6 +20,8 @@ from app.engine import evaluate, seed_db
 from app.hardware import open_gate, GPIO_ENABLED
 from app.logger import log_event
 from app.database import engine, Base, get_db
+from app import camera_intelligence
+from app.camera_intelligence import CameraIntelligenceEvent, CameraEventType
 from app.models import User, Credential, Gate, GateSyncStatus, Event, Setting
 from app.background import CosecWorker, SyncWorker, resolve_identity
 
@@ -785,6 +788,158 @@ async def get_stats_summary(db: Session = Depends(get_db)):
     denied = total - granted
     overrides = db.query(Event).filter(Event.method == Method.MANUAL).count()
     return {"total": total, "granted": granted, "denied": denied, "overrides": overrides}
+
+
+# Camera Intelligence Integration - Audit Only
+
+@app.post("/integrations/camera-intelligence/event")
+async def camera_intelligence_event(
+    payload: CameraIntelligenceEvent, db: Session = Depends(get_db)
+):
+    """
+    Receive a final event from the Camera Intelligence service.
+
+    Audit-only mode: The event is persisted to the Storage Service as a REVIEW record.
+    The mapped HIAS user is verified against local SQLite, but the camera event itself
+    is persisted only in the Storage Service (no local SQLite event duplicate).
+    No call to process_access_request() or open_gate() is made.
+    """
+    # 1. Check if integration is enabled
+    if not camera_intelligence.CAMERA_INTELLIGENCE_ENABLED:
+        raise HTTPException(
+            status_code=403,
+            detail="Camera Intelligence integration is disabled",
+        )
+
+    # 2. Validate and map camera student_id to canonical HIAS user_id.
+    is_valid, hias_user_id, error = (
+        camera_intelligence.validate_and_map_event(payload)
+    )
+    if not is_valid:
+        raise HTTPException(status_code=422, detail=error)
+
+    # 3. Verify that the mapped HIAS user exists.
+    db_user = (
+        db.query(User)
+        .filter(User.user_id == hias_user_id)
+        .first()
+    )
+    if not db_user:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Mapped HIAS user '{hias_user_id}' does not exist",
+        )
+    user_name = db_user.name
+
+    # 4. Construct the canonical Storage Service payload.
+    # Preserve the original student_id; do not replace it with user_id.
+    storage_event = {
+        "trace_id": payload.trace_id,
+        "timestamp": payload.timestamp,
+        "student_id": payload.student_id,
+        "event": payload.event.value,
+        "confidence": payload.confidence,
+        "status": "REVIEW",
+        "source_service": payload.source_service.value,
+        "metadata": {
+            "mapped_hias_user_id": hias_user_id,
+            "audit_only": True,
+        },
+    }
+
+    storage_url = os.getenv(
+        "STORAGE_SERVICE_URL",
+        "http://127.0.0.1:8005",
+    ).rstrip("/")
+
+    try:
+        timeout = float(
+            os.getenv("STORAGE_REQUEST_TIMEOUT", "5.0")
+        )
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            response = await client.post(
+                f"{storage_url}/store-event",
+                json=storage_event,
+            )
+    except httpx.TimeoutException:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": "Storage Service timeout",
+                "trace_id": payload.trace_id,
+            },
+        )
+    except httpx.RequestError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": "Storage Service unavailable",
+                "trace_id": payload.trace_id,
+                "reason": str(exc),
+            },
+        )
+
+    if response.status_code >= 400:
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "error": "Storage Service HTTP error",
+                "status_code": response.status_code,
+                "trace_id": payload.trace_id,
+            },
+        )
+
+    try:
+        storage_data = response.json()
+    except Exception:
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "error": "Storage Service returned invalid JSON",
+                "trace_id": payload.trace_id,
+            },
+        )
+
+    storage_status = storage_data.get("status")
+    if storage_status != "ACCEPTED":
+        reason = str(storage_data.get("reason", ""))
+        if "duplicate" in reason.lower() or "already exists" in reason.lower():
+            raise HTTPException(
+                status_code=409,
+                detail=f"Duplicate camera trace_id: {payload.trace_id}",
+            )
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "error": "Storage Service rejected event",
+                "trace_id": payload.trace_id,
+                "reason": reason,
+            },
+        )
+
+    # 5. Broadcast audit event to SSE clients only upon successful persistence
+    direction = Direction.IN if payload.event == CameraEventType.ENTRY else Direction.OUT
+    audit_event = ControllerEvent(
+        trace_id=payload.trace_id,
+        user_id=hias_user_id,
+        name=f"[CAM-AUDIT] {user_name}",
+        direction=direction,
+        method=Method.FACE,
+        decision=Decision.REVIEW,
+        reason=Reason.VALID,
+        device_id="camera-intelligence",
+        timestamp=payload.timestamp,
+    )
+    await broadcast_event(audit_event)
+
+    return {
+        "status": "AUDIT_RECORDED",
+        "trace_id": payload.trace_id,
+        "mapped_user_id": hias_user_id,
+        "decision": "REVIEW",
+        "storage_result": storage_data,
+        "note": "Audit-only mode: no physical access granted",
+    }
 
 
 if __name__ == "__main__":
