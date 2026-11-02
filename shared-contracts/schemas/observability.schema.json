@@ -1,0 +1,71 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Observability Signal Schema",
+  "description": "Signals emitted by all services for Pravah observability system. Covers events, metrics, health, and failure signals.",
+  "type": "object",
+  "required": [
+    "signal_id",
+    "timestamp",
+    "signal_type",
+    "service_name",
+    "data"
+  ],
+  "properties": {
+    "signal_id": {
+      "type": "string",
+      "description": "Unique signal identifier (UUID)",
+      "format": "uuid"
+    },
+    "trace_id": {
+      "type": ["string", "null"],
+      "description": "Correlation with event trace (optional, for event-related signals)",
+      "pattern": "^HIAS-[0-9]{8}-[a-f0-9]{8}-[0-9]{6}$|^null$"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO8601 timestamp of signal"
+    },
+    "signal_type": {
+      "type": "string",
+      "enum": ["EVENT", "METRIC", "HEALTH", "FAILURE"],
+      "description": "Type of signal for routing in Pravah"
+    },
+    "service_name": {
+      "type": "string",
+      "enum": [
+        "ingestion_service",
+        "recognition_service",
+        "intelligence_service",
+        "confidence_service",
+        "human_loop_service",
+        "storage_service",
+        "backend_integration_service",
+        "dashboard_service"
+      ],
+      "description": "Originating service"
+    },
+    "level": {
+      "type": "string",
+      "enum": ["INFO", "WARNING", "ERROR", "CRITICAL"],
+      "description": "Severity level (applies to FAILURE signals especially)"
+    },
+    "data": {
+      "type": "object",
+      "description": "Signal payload (structure varies by signal_type)",
+      "properties": {
+        "message": {"type": "string"},
+        "value": {"type": ["number", "string", "object"]},
+        "duration_ms": {"type": "number", "description": "For latency metrics"},
+        "error_code": {"type": "string"},
+        "context": {"type": "object"}
+      }
+    },
+    "tags": {
+      "type": "array",
+      "description": "Optional tags for grouping/filtering",
+      "items": {"type": "string"}
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,81 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Error Signal Schema",
+  "description": "Structured error/failure reporting. Used by all services to report exceptions, contract violations, or system failures.",
+  "type": "object",
+  "required": [
+    "error_id",
+    "timestamp",
+    "error_code",
+    "service_name",
+    "severity"
+  ],
+  "properties": {
+    "error_id": {
+      "type": "string",
+      "description": "Unique error identifier (UUID)",
+      "format": "uuid"
+    },
+    "trace_id": {
+      "type": ["string", "null"],
+      "description": "Related event trace_id (for traceability)",
+      "pattern": "^HIAS-[0-9]{8}-[a-f0-9]{8}-[0-9]{6}$|^null$"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO8601 timestamp of error occurrence"
+    },
+    "error_code": {
+      "type": "string",
+      "description": "Machine-readable error code (e.g., ERR_INVALID_SCHEMA, ERR_DB_CONNECTION)",
+      "pattern": "^ERR_[A-Z_]+$"
+    },
+    "service_name": {
+      "type": "string",
+      "enum": [
+        "ingestion_service",
+        "recognition_service",
+        "intelligence_service",
+        "confidence_service",
+        "human_loop_service",
+        "storage_service",
+        "backend_integration_service",
+        "dashboard_service"
+      ],
+      "description": "Service where error occurred"
+    },
+    "severity": {
+      "type": "string",
+      "enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL"],
+      "description": "Error severity impact"
+    },
+    "error_message": {
+      "type": "string",
+      "description": "Human-readable error message",
+      "maxLength": 1000
+    },
+    "error_type": {
+      "type": "string",
+      "enum": ["SCHEMA_VALIDATION", "DB_ERROR", "SERVICE_UNAVAILABLE", "TIMEOUT", "AUTHORIZATION", "CONFIG_ERROR", "OTHER"],
+      "description": "Category of error"
+    },
+    "context": {
+      "type": "object",
+      "description": "Additional error context",
+      "properties": {
+        "endpoint": {"type": "string"},
+        "request_body": {"type": "object"},
+        "stack_trace": {"type": "string"},
+        "http_status": {"type": "integer"},
+        "retry_count": {"type": "integer"}
+      }
+    },
+    "resolution": {
+      "type": "string",
+      "description": "Suggested resolution or remediation step",
+      "maxLength": 500
+    }
+  },
+  "additionalProperties": false
+}
