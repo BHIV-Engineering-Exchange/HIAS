@@ -18,11 +18,11 @@ logger = logging.getLogger(__name__)
 
 class SchemaValidator:
     """Validates events against shared-contracts"""
-    
+
     def __init__(self, schema_dir: str = None):
         """
         Initialize validator with schema directory
-        
+
         Args:
             schema_dir: Path to shared-contracts/schemas directory
         """
@@ -32,11 +32,11 @@ class SchemaValidator:
             dev_path = Path(__file__).parent.parent.parent / "shared-contracts" / "schemas"
             docker_path = Path(__file__).parent.parent / "shared-contracts" / "schemas"
             schema_dir = dev_path if dev_path.is_dir() else docker_path
-        
+
         self.schema_dir = Path(schema_dir)
         self.schemas = {}
         self._load_schemas()
-    
+
     def _load_schemas(self):
         """Load all schema files into memory"""
         required_schemas = [
@@ -49,7 +49,7 @@ class SchemaValidator:
             'observability.schema.json',
             'error.schema.json'
         ]
-        
+
         for schema_name in required_schemas:
             schema_path = self.schema_dir / schema_name
             try:
@@ -60,23 +60,23 @@ class SchemaValidator:
                 logger.warning(f"⚠️  Schema not found: {schema_path}")
             except json.JSONDecodeError as e:
                 logger.error(f"❌ Invalid JSON in {schema_name}: {str(e)}")
-    
+
     def validate_storage_event(self, event: dict) -> Tuple[bool, Optional[str]]:
         """
         Validate event against storage.schema.json
-        
+
         This is the CRITICAL validation point — all events must pass here
         before being stored.
-        
+
         Args:
             event: Event data to validate
-        
+
         Returns:
             (is_valid: bool, error_message: Optional[str])
         """
         if 'storage.schema.json' not in self.schemas:
             return False, "Storage schema not loaded"
-        
+
         try:
             validate(instance=event, schema=self.schemas['storage.schema.json'])
             return True, None
@@ -88,12 +88,12 @@ class SchemaValidator:
             error_msg = f"Validation error: {str(e)}"
             logger.error(error_msg)
             return False, error_msg
-    
+
     def validate_ingestion_event(self, event: dict) -> Tuple[bool, Optional[str]]:
         """Validate against ingestion.schema.json"""
         if 'ingestion.schema.json' not in self.schemas:
             return False, "Ingestion schema not loaded"
-        
+
         try:
             validate(instance=event, schema=self.schemas['ingestion.schema.json'])
             return True, None
@@ -101,12 +101,12 @@ class SchemaValidator:
             return False, f"Ingestion validation failed: {e.message}"
         except Exception as e:
             return False, f"Validation error: {str(e)}"
-    
+
     def validate_recognition_event(self, event: dict) -> Tuple[bool, Optional[str]]:
         """Validate against recognition.schema.json"""
         if 'recognition.schema.json' not in self.schemas:
             return False, "Recognition schema not loaded"
-        
+
         try:
             validate(instance=event, schema=self.schemas['recognition.schema.json'])
             return True, None
@@ -114,12 +114,12 @@ class SchemaValidator:
             return False, f"Recognition validation failed: {e.message}"
         except Exception as e:
             return False, f"Validation error: {str(e)}"
-    
+
     def validate_intelligence_event(self, event: dict) -> Tuple[bool, Optional[str]]:
         """Validate against intelligence.schema.json"""
         if 'intelligence.schema.json' not in self.schemas:
             return False, "Intelligence schema not loaded"
-        
+
         try:
             validate(instance=event, schema=self.schemas['intelligence.schema.json'])
             return True, None
@@ -127,12 +127,12 @@ class SchemaValidator:
             return False, f"Intelligence validation failed: {e.message}"
         except Exception as e:
             return False, f"Validation error: {str(e)}"
-    
+
     def validate_confidence_event(self, event: dict) -> Tuple[bool, Optional[str]]:
         """Validate against confidence.schema.json"""
         if 'confidence.schema.json' not in self.schemas:
             return False, "Confidence schema not loaded"
-        
+
         try:
             validate(instance=event, schema=self.schemas['confidence.schema.json'])
             return True, None
@@ -140,12 +140,12 @@ class SchemaValidator:
             return False, f"Confidence validation failed: {e.message}"
         except Exception as e:
             return False, f"Validation error: {str(e)}"
-    
+
     def validate_human_loop_event(self, event: dict) -> Tuple[bool, Optional[str]]:
         """Validate against human-loop.schema.json"""
         if 'human-loop.schema.json' not in self.schemas:
             return False, "Human loop schema not loaded"
-        
+
         try:
             validate(instance=event, schema=self.schemas['human-loop.schema.json'])
             return True, None
@@ -153,33 +153,33 @@ class SchemaValidator:
             return False, f"Human loop validation failed: {e.message}"
         except Exception as e:
             return False, f"Validation error: {str(e)}"
-    
+
     def validate_trace_id(self, trace_id: str) -> Tuple[bool, Optional[str]]:
         """
         Validate trace_id format
-        
+
         Format: HIAS-YYYYMMDD-XXXXXXXX-XXXXXX
         Example: HIAS-20260418-a1b2c3d4-000001
         """
         import re
-        
+
         pattern = r'^HIAS-[0-9]{8}-[a-f0-9]{8}-[0-9]{6}$'
         if re.match(pattern, trace_id):
             return True, None
         else:
             return False, f"Invalid trace_id format: {trace_id}"
-    
+
     def validate_required_fields(self, event: dict, required_fields: list) -> Tuple[bool, Optional[str]]:
         """Validate that all required fields are present"""
         missing = [field for field in required_fields if field not in event]
         if missing:
             return False, f"Missing required fields: {', '.join(missing)}"
         return True, None
-    
+
     def validate_no_mutation(self, existing_event: dict, incoming_event: dict) -> Tuple[bool, Optional[str]]:
         """
         Validate that incoming event is NOT a mutation attempt
-        
+
         Since storage is append-only, we should NEVER see an update to an existing record.
         """
         # This is a placeholder for mutation detection
@@ -196,7 +196,7 @@ class SchemaValidator:
 def demo_validation():
     """Demonstration of schema validation"""
     validator = SchemaValidator()
-    
+
     # Valid event
     valid_event = {
         "trace_id": "HIAS-20260418-a1b2c3d4-000001",
@@ -209,28 +209,28 @@ def demo_validation():
         "camera_id": "GATE-MAIN",
         "zone": "GATE_MAIN"
     }
-    
+
     is_valid, error = validator.validate_storage_event(valid_event)
     print(f"Valid Event: {is_valid}")
     if error:
         print(f"  Error: {error}")
-    
+
     # Invalid event (missing required field)
     invalid_event = {
         "trace_id": "HIAS-20260418-a1b2c3d4-000001",
         "timestamp": "2026-04-18T08:00:00Z",
         # Missing: student_id, event, confidence, status, source_service
     }
-    
+
     is_valid, error = validator.validate_storage_event(invalid_event)
     print(f"\nInvalid Event: {is_valid}")
     if error:
         print(f"  Error: {error}")
-    
+
     # Trace ID validation
     is_valid, error = validator.validate_trace_id("HIAS-20260418-a1b2c3d4-000001")
     print(f"\nValid Trace ID: {is_valid}")
-    
+
     is_valid, error = validator.validate_trace_id("INVALID-TRACE-ID")
     print(f"Invalid Trace ID: {is_valid}")
     print(f"  Error: {error}")
@@ -238,6 +238,3 @@ def demo_validation():
 
 if __name__ == "__main__":
     demo_validation()
-
-
-

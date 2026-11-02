@@ -33,9 +33,9 @@ def test_generate_hash(hash_chain):
         "event": "ENTRY",
         "confidence": 0.95
     }
-    
+
     hash_value = hash_chain.generate_hash(hash_chain.GENESIS_HASH, event_data)
-    
+
     assert hash_value is not None
     assert len(hash_value) == 64  # SHA256 produces 64 hex chars
     assert all(c in '0123456789abcdef' for c in hash_value)
@@ -49,10 +49,10 @@ def test_hash_deterministic(hash_chain):
         "event": "ENTRY",
         "confidence": 0.95
     }
-    
+
     hash1 = hash_chain.generate_hash(hash_chain.GENESIS_HASH, event_data)
     hash2 = hash_chain.generate_hash(hash_chain.GENESIS_HASH, event_data)
-    
+
     assert hash1 == hash2, "Same input should produce same hash"
 
 
@@ -64,17 +64,17 @@ def test_hash_sensitive_to_data(hash_chain):
         "event": "ENTRY",
         "confidence": 0.95
     }
-    
+
     event2 = {
         "trace_id": "HIAS-20260418-a1b2c3d4-000001",
         "student_id": "STU002",  # Different student
         "event": "ENTRY",
         "confidence": 0.95
     }
-    
+
     hash1 = hash_chain.generate_hash(hash_chain.GENESIS_HASH, event1)
     hash2 = hash_chain.generate_hash(hash_chain.GENESIS_HASH, event2)
-    
+
     assert hash1 != hash2, "Different events should produce different hashes"
 
 
@@ -86,12 +86,12 @@ def test_verify_valid_chain_link(hash_chain):
         "event": "ENTRY",
         "confidence": 0.95
     }
-    
+
     prev_hash = hash_chain.GENESIS_HASH
     current_hash = hash_chain.generate_hash(prev_hash, event_data)
-    
+
     is_valid, error = hash_chain.verify_chain_link(prev_hash, current_hash, event_data)
-    
+
     assert is_valid is True
     assert error is None
 
@@ -104,13 +104,13 @@ def test_verify_invalid_chain_link(hash_chain):
         "event": "ENTRY",
         "confidence": 0.95
     }
-    
+
     prev_hash = hash_chain.GENESIS_HASH
     correct_hash = hash_chain.generate_hash(prev_hash, event_data)
     tampered_hash = "a" * 64  # Fake hash
-    
+
     is_valid, error = hash_chain.verify_chain_link(prev_hash, tampered_hash, event_data)
-    
+
     assert is_valid is False
     assert error is not None
     assert "mismatch" in error.lower()
@@ -124,16 +124,16 @@ def test_tamper_detection(hash_chain):
         "event": "ENTRY",
         "confidence": 0.95
     }
-    
+
     prev_hash = hash_chain.GENESIS_HASH
     original_hash = hash_chain.generate_hash(prev_hash, event_data)
-    
+
     # Try to verify with tampered event data
     tampered_event = event_data.copy()
     tampered_event['student_id'] = "STU999"
-    
+
     is_valid, error = hash_chain.verify_chain_link(prev_hash, original_hash, tampered_event)
-    
+
     assert is_valid is False, "Tampered event should not verify"
 
 
@@ -146,21 +146,21 @@ def test_full_chain_verification(hash_chain):
             "n": 1
         }
     ]
-    
+
     # Add more events
     for i in range(2, 5):
         prev_hash = events[-1]['hash']
         event_data = {"n": i}
         current_hash = hash_chain.generate_hash(prev_hash, event_data)
-        
+
         events.append({
             "hash": current_hash,
             "prev_hash": prev_hash,
             "n": i
         })
-    
+
     is_valid, error = hash_chain.verify_full_chain(events)
-    
+
     assert is_valid is True
     assert error is None
 
@@ -174,16 +174,16 @@ def test_chain_break_detection(hash_chain):
             "n": 1
         }
     ]
-    
+
     # Create a broken chain (wrong prev_hash)
     events.append({
         "hash": "a" * 64,
         "prev_hash": "b" * 64,  # Wrong prev_hash
         "n": 2
     })
-    
+
     is_valid, error = hash_chain.verify_full_chain(events)
-    
+
     assert is_valid is False
     assert error is not None
 
@@ -193,18 +193,18 @@ def test_chain_proof(hash_chain):
     # Create chain
     event1 = {"trace_id": "T1", "n": 1}
     event2 = {"trace_id": "T2", "n": 2}
-    
+
     hash1 = hash_chain.generate_hash(hash_chain.GENESIS_HASH, event1)
     hash2 = hash_chain.generate_hash(hash1, event2)
-    
+
     events = [
         {"hash": hash1, "prev_hash": hash_chain.GENESIS_HASH, **event1},
         {"hash": hash2, "prev_hash": hash1, **event2}
     ]
-    
+
     # Get proof for event1
     proof = hash_chain.get_chain_proof(hash1, events)
-    
+
     assert proof['verified'] is True
     assert proof['position'] == 0
     assert proof['next_hash'] == hash2
@@ -214,9 +214,9 @@ def test_chain_proof(hash_chain):
 def test_non_existent_hash_proof(hash_chain):
     """❌ Proof for non-existent hash should fail"""
     events = []
-    
+
     proof = hash_chain.get_chain_proof("fake_hash", events)
-    
+
     assert proof['verified'] is False
     assert "not found" in proof['reason'].lower()
 

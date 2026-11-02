@@ -19,4 +19,3 @@ def test_schema_dir_and_load():
         "error.schema.json",
     ]:
         assert name in validator.schemas, f"{name} not loaded"
-

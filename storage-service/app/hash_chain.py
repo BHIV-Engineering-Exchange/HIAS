@@ -23,49 +23,49 @@ from typing import Optional, Dict, Tuple
 
 class HashChain:
     """Manages SHA256 hash chain for event immutability"""
-    
+
     GENESIS_HASH = "0" * 64  # Initial hash (all zeros)
-    
+
     def __init__(self):
         self.last_hash = self.GENESIS_HASH
-    
+
     def generate_hash(self, prev_hash: str, event_data: dict) -> str:
         """
         Generate SHA256 hash for new event
-        
+
         Formula: hash(current) = SHA256(prev_hash + JSON(event_data))
-        
+
         Args:
             prev_hash: Previous event hash
             event_data: Event data to hash
-        
+
         Returns:
             64-character hex SHA256 digest
         """
         # Serialize event data to JSON (deterministic order)
         event_json = json.dumps(event_data, sort_keys=True, separators=(',', ':'))
-        
+
         # Combine prev_hash + event_data
         combined = prev_hash + event_json
-        
+
         # Generate SHA256
         hash_obj = hashlib.sha256(combined.encode('utf-8'))
         return hash_obj.hexdigest()
-    
+
     def verify_chain_link(self, prev_hash: str, current_hash: str, event_data: dict) -> Tuple[bool, Optional[str]]:
         """
         Verify that current_hash is valid for given prev_hash and event_data
-        
+
         Returns:
             (is_valid: bool, error_message: Optional[str])
         """
         calculated_hash = self.generate_hash(prev_hash, event_data)
-        
+
         if calculated_hash != current_hash:
             return False, f"Hash mismatch: calculated {calculated_hash}, got {current_hash}"
-        
+
         return True, None
-    
+
     def verify_full_chain(self, events: list) -> Tuple[bool, Optional[str]]:
         """
         Verify the entire chain, including sequential hash links.
@@ -107,7 +107,7 @@ class HashChain:
             expected_prev_hash = current_hash
 
         return True, None
-    
+
     def get_chain_proof(self, event_hash: str, all_events: list) -> Dict:
         """
         Return event position only after verifying the complete chain.
@@ -150,7 +150,7 @@ class HashChain:
 def demo_hash_chain():
     """Demonstration of hash chain mechanics"""
     hc = HashChain()
-    
+
     # Event 1
     event1_data = {
         "trace_id": "HIAS-20260418-a1b2c3d4-000001",
@@ -162,7 +162,7 @@ def demo_hash_chain():
     event1_hash = hc.generate_hash(hc.GENESIS_HASH, event1_data)
     print(f"Event 1 Hash: {event1_hash}")
     print(f"  Prev Hash: {hc.GENESIS_HASH}")
-    
+
     # Event 2
     event2_data = {
         "trace_id": "HIAS-20260418-a1b2c3d4-000002",
@@ -174,7 +174,7 @@ def demo_hash_chain():
     event2_hash = hc.generate_hash(event1_hash, event2_data)
     print(f"\nEvent 2 Hash: {event2_hash}")
     print(f"  Prev Hash: {event1_hash}")
-    
+
     # Verify chain
     events = [
         {
@@ -188,12 +188,12 @@ def demo_hash_chain():
             **event2_data
         }
     ]
-    
+
     is_valid, error = hc.verify_full_chain(events)
     print(f"\nChain Valid: {is_valid}")
     if error:
         print(f"  Error: {error}")
-    
+
     # Try to tamper
     print("\n--- TAMPERING ATTEMPT ---")
     tampered_events = [
