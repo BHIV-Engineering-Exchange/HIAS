@@ -1,5 +1,4 @@
 services:
-
   hias-backend:
     build:
       context: ./backend
@@ -10,10 +9,15 @@ services:
       - "8026:8000"
     env_file:
       - ./backend/.env
+    environment:
+      STORAGE_SERVICE_URL: http://storage-service:8005
     volumes:
       - hias_data_local:/app/data
     networks:
       - hias_network
+    depends_on:
+      storage-service:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 10s
@@ -45,10 +49,95 @@ services:
       retries: 3
       start_period: 5s
 
+  mongodb:
+    image: mongo:7.0
+    container_name: hias-mongodb
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_DATABASE: hias
+    volumes:
+      - hias_mongo_data:/data/db
+    networks:
+      - hias_network
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          mongosh --quiet --eval
+          'try { rs.status().ok } catch (e) {
+          rs.initiate({_id:"rs0",members:[{_id:0,host:"mongodb:27017"}]}).ok
+          }'
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 10s
+
+  storage-service:
+    build:
+      context: .
+      dockerfile: storage-service/Dockerfile
+    container_name: hias-storage
+    ports:
+      - "8005:8005"
+    environment:
+      DATABASE_URL: mongodb://mongodb:27017/?replicaSet=rs0
+      MONGODB_DB_NAME: hias
+      STORAGE_SERVICE_PORT: "8005"
+    volumes:
+      - ./shared-contracts:/app/shared-contracts:ro
+    networks:
+      - hias_network
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://localhost:8005/health', timeout=3)"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  intelligence-service:
+    build:
+      context: .
+      dockerfile: intelligence-service/Dockerfile
+    image: hias-intelligence-service:local
+    container_name: hias-intelligence
+    ports:
+      - "8004:8004"
+    environment:
+      STORAGE_SERVICE_URL: http://storage-service:8005
+    networks:
+      - hias_network
+    depends_on:
+      storage-service:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://localhost:8004/health', timeout=3)"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
 networks:
   hias_network:
     driver: bridge
 
 volumes:
   hias_data_local:
+    driver: local
+  hias_mongo_data:
     driver: local

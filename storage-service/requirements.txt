@@ -1,0 +1,28 @@
+# HIAS Storage Service Requirements
+
+# Web Framework
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+pydantic==2.5.0
+
+# Database
+# Database
+pymongo==4.11.1
+
+# Validation
+jsonschema==4.20.0
+
+# Utilities
+python-dotenv==1.0.0
+python-multipart==0.0.6
+
+# Testing
+pytest==7.4.3
+pytest-asyncio==0.21.1
+
+# Logging & Monitoring
+python-json-logger==2.0.7
+
+# Development
+black==23.12.1
+flake8==6.1.0

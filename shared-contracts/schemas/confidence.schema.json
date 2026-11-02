@@ -1,0 +1,65 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Confidence Routing Schema",
+  "description": "Confidence service makes routing decision: AUTO accept, send to REVIEW queue, or REJECT.",
+  "type": "object",
+  "required": [
+    "trace_id",
+    "timestamp",
+    "student_id",
+    "event",
+    "confidence",
+    "routing_decision"
+  ],
+  "properties": {
+    "trace_id": {
+      "type": "string",
+      "description": "Inherited from upstream",
+      "pattern": "^HIAS-[0-9]{8}-[a-f0-9]{8}-[0-9]{6}$"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO8601 routing timestamp"
+    },
+    "student_id": {
+      "type": "string",
+      "description": "Student identified",
+      "pattern": "^[A-Z0-9]{6,10}$"
+    },
+    "event": {
+      "type": "string",
+      "enum": ["ENTRY", "EXIT"],
+      "description": "Event type from intelligence service"
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0,
+      "description": "Final confidence score"
+    },
+    "routing_decision": {
+      "type": "string",
+      "enum": ["AUTO", "REVIEW", "REJECT"],
+      "description": "Routing outcome based on confidence thresholds"
+    },
+    "thresholds_applied": {
+      "type": "object",
+      "description": "Config thresholds used for decision",
+      "properties": {
+        "auto_threshold": {"type": "number", "minimum": 0.0, "maximum": 1.0},
+        "review_threshold": {"type": "number", "minimum": 0.0, "maximum": 1.0}
+      }
+    },
+    "reason": {
+      "type": "string",
+      "description": "Business reason for routing (e.g., 'confidence below review threshold')"
+    },
+    "anomalies": {
+      "type": "array",
+      "description": "Anomalies that influenced routing",
+      "items": {"type": "string"}
+    }
+  },
+  "additionalProperties": false
+}
